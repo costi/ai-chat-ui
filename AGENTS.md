@@ -6,6 +6,8 @@
 - Keep streamed replies from moving the reader’s scroll position.
 - The composer should grow with newlines and wrapped text, shrink when text is removed, and reset after sending.
 - Sanitize rendered Markdown. Run generated code only in isolated Workers/frames; never expose the parent DOM, credentials, or chat storage.
+- Chat and app editing should share the streamed Chat Completions tool parser. A missing tool call does not establish that a model lacks tool support.
+- Show executed JavaScript in tool cards and preserve it when saved chats reload.
 - Use chunk-based source tools for app editing; keep model history bounded instead of sending or regenerating the whole file.
 - Keep app-update proposals separate from the working file and preview them in a sandbox.
 - Label context counts as estimates and context limits as manual settings.
