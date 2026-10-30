@@ -80,7 +80,9 @@
     .preview-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px; border-top: 1px solid #444; }
     .preview-toolbar span { flex: 1; font-size: 13px; }
     .preview-toolbar button { background: #444; padding: 6px 10px; font-size: 12px; }
-    .html-preview { display: block; width: 100%; height: 400px; border: 0; background: white; border-radius: 0 0 12px 12px; }
+    .preview-container { width: 100%; height: 424px; min-width: min(240px, 100%); max-width: 100%; min-height: 180px; resize: both; overflow: hidden; border-top: 1px solid #444; border-radius: 0 0 12px 12px; }
+    .html-preview { display: block; width: 100%; height: calc(100% - 24px); border: 0; background: white; }
+    .preview-resize-hint { height: 24px; padding: 4px 18px 4px 10px; font-size: 11px; color: #aaa; text-align: right; background: #292929; }
     .config-panel .toggle-label { display: flex; align-items: center; gap: 8px; }
     .toggle-label input { width: auto; }
     #stopBtn { background: #444; padding: 8px 10px; align-self: center; }
@@ -476,12 +478,19 @@
     return { url: parsed.href, content_type: type, text: text.slice(0,20000), truncated: truncated || text.length > 20000 };
   }
 
+  function previewDocument(preview) {
+    return `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; frame-src 'none'; worker-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"><style>body{font:15px system-ui;margin:20px;color:#222;background:#fff}*{box-sizing:border-box}</style>${preview.html}`;
+  }
+
   function mountPreview(container, preview) {
-    container.querySelector("iframe")?.remove();
+    container.querySelector(".preview-container")?.remove();
+    const wrapper = document.createElement("div"); wrapper.className = "preview-container";
     const frame = isolatedFrame(preview.title || "HTML preview");
     frame.className = "html-preview";
-    frame.srcdoc = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; frame-src 'none'; worker-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"><style>body{font:15px system-ui;margin:20px;color:#222;background:#fff}*{box-sizing:border-box}</style>${preview.html}`;
-    container.appendChild(frame);
+    frame.srcdoc = previewDocument(preview);
+    const hint = document.createElement("div"); hint.className = "preview-resize-hint";
+    hint.textContent = "Drag the bottom-right corner to resize";
+    wrapper.append(frame, hint); container.appendChild(wrapper);
   }
 
   function appendTool(message, startPreview = false) {
@@ -518,8 +527,10 @@
       const stop = document.createElement("button"); stop.textContent = "Close preview"; stop.type = "button";
       const title = document.createElement("span"); title.textContent = message.preview.title || "HTML preview";
       run.onclick = () => mountPreview(card, message.preview);
-      stop.onclick = () => card.querySelector("iframe")?.remove();
-      toolbar.append(title, run, stop); card.appendChild(toolbar);
+      stop.onclick = () => card.querySelector(".preview-container")?.remove();
+      const open = document.createElement("button"); open.textContent = "Open in new tab"; open.type = "button";
+      open.onclick = () => openSandboxedTab(previewDocument(message.preview), message.preview.title || "HTML preview", "Interactive preview · Isolated from your chats and saved credentials. Opens a fresh instance.");
+      toolbar.append(title, run, open, stop); card.appendChild(toolbar);
     }
     box.appendChild(card);
     if (startPreview && message.preview) mountPreview(card, message.preview);
@@ -722,7 +733,7 @@
   document.getElementById("toolsEnabled").addEventListener("change", saveState);
   document.getElementById("stopBtn").addEventListener("click", () => {
     turnController?.abort();
-    document.querySelectorAll(".html-preview").forEach(frame => frame.remove());
+    document.querySelectorAll(".preview-container").forEach(container => container.remove());
   });
   document.getElementById("newThread").addEventListener("click", newThread);
   document.getElementById("deleteThread").addEventListener("click", () => {
@@ -898,16 +909,19 @@
   }
 
 
-  function openAppPreview() {
-    if (!proposedSource) return;
-    // The new tab is a trusted static shell. The generated document runs only
-    // inside an opaque-origin sandbox, never directly as a same-origin blob tab.
-    const policy = "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; worker-src blob:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'";
-    const preview = `<meta http-equiv="Content-Security-Policy" content="${policy}">${proposedSource}`;
-    const shell = `<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AI Chat — proposed update</title><style>body{margin:0;background:#171717;color:#eee;font:13px system-ui;height:100vh;display:flex;flex-direction:column}header{padding:12px 18px;line-height:1.5}iframe{border:0;width:100%;flex:1;background:#212121}</style></head><body><header>Proposed UI · Isolated preview · Saved chats, tokens, and API access are unavailable here. Your working file is unchanged.</header><iframe title="Proposed AI Chat UI" sandbox="allow-scripts" referrerpolicy="no-referrer" allow="camera 'none'; microphone 'none'; geolocation 'none'" srcdoc="${escapeHTML(preview)}"></iframe></body></html>`;
+  function openSandboxedTab(html, title, notice) {
+    // Only a trusted static shell opens as a blob tab. Generated code stays in
+    // an opaque-origin iframe with the same CSP as its inline preview.
+    const shell = `<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHTML(title)}</title><style>body{margin:0;background:#171717;color:#eee;font:13px system-ui;height:100vh;display:flex;flex-direction:column}header{padding:12px 18px;line-height:1.5}iframe{border:0;width:100%;flex:1;min-height:0;background:#212121}</style></head><body><header>${escapeHTML(notice)}</header><iframe title="${escapeHTML(title)}" sandbox="allow-scripts" referrerpolicy="no-referrer" allow="camera 'none'; microphone 'none'; geolocation 'none'; clipboard-read 'none'; clipboard-write 'none'" srcdoc="${escapeHTML(html)}"></iframe></body></html>`;
     const url = URL.createObjectURL(new Blob([shell], {type:"text/html"}));
     previewURLs.add(url);
     window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  function openAppPreview() {
+    if (!proposedSource) return;
+    const policy = "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; worker-src blob:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'";
+    openSandboxedTab(`<meta http-equiv="Content-Security-Policy" content="${policy}">${proposedSource}`, "AI Chat — proposed update", "Proposed UI · Isolated preview · Saved chats, tokens, and API access are unavailable here. Your working file is unchanged.");
   }
 
   document.getElementById("editApp").addEventListener("click", () => document.getElementById("editDialog").showModal());
