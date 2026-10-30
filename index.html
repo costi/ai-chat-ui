@@ -61,6 +61,7 @@
       gap: 12px;
     }
     .msg {
+      flex-shrink: 0;
       max-width: 80%;
       padding: 10px 14px;
       border-radius: 8px;
@@ -80,7 +81,6 @@
       white-space: normal;
       overflow-wrap: anywhere;
       min-width: 0;
-      overflow-x: auto;
     }
     .msg.assistant > :first-child { margin-top: 0; }
     .msg.assistant > :last-child { margin-bottom: 0; }
@@ -106,6 +106,7 @@
       border-left: 3px solid var(--accent);
       color: var(--text-muted);
     }
+    .msg.assistant .table-scroll { overflow-x: auto; }
     .msg.assistant table { border-collapse: collapse; }
     .msg.assistant th, .msg.assistant td {
       border: 1px solid var(--text-muted);
@@ -178,6 +179,12 @@
       USE_PROFILES: { html: true },
       FORBID_TAGS: ["style"],
       FORBID_ATTR: ["style"]
+    });
+    element.querySelectorAll("table").forEach((table) => {
+      const wrapper = document.createElement("div");
+      wrapper.className = "table-scroll";
+      table.replaceWith(wrapper);
+      wrapper.appendChild(table);
     });
   }
 
