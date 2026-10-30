@@ -6,6 +6,7 @@
 - Keep streamed replies from moving the reader’s scroll position.
 - The composer should grow with newlines and wrapped text, shrink when text is removed, and reset after sending.
 - Sanitize rendered Markdown. Run generated code only in isolated Workers/frames; never expose the parent DOM, credentials, or chat storage.
+- Use chunk-based source tools for app editing; keep model history bounded instead of sending or regenerating the whole file.
 - Keep app-update proposals separate from the working file and preview them in a sandbox.
 - Label context counts as estimates and context limits as manual settings.
 - Verify behavioral UI changes in a browser, including mobile layout. Use mocked API responses instead of live paid requests unless explicitly requested.
