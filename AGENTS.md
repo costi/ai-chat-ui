@@ -10,6 +10,7 @@
 - Show executed JavaScript in tool cards and preserve it when saved chats reload.
 - Use chunk-based source tools for app editing; keep model history bounded instead of sending or regenerating the whole file.
 - Interactive previews may load scripts, styles, assets, and fetch from any HTTPS source. Keep opaque-origin isolation and keep the computation Worker network-blocked.
+- Reuse chunk-editing tools for canvases, target only the selected preview source, and preserve review/apply, undo, and saved revisions. Never read the iframe runtime DOM across its isolation boundary.
 - Keep app-update proposals separate from the working file and preview them in a sandbox.
 - Label context counts as estimates and context limits as manual settings.
 - Verify behavioral UI changes in a browser, including mobile layout. Use mocked API responses instead of live paid requests unless explicitly requested.

@@ -6,4 +6,4 @@ A single HTML file. Download `index.html`, point it at an OpenAI Chat Completion
 - Saved chats, settings, and automatic chat titles
 - Browser tools: calculator, time, JavaScript, HTML previews, and URL fetching (where CORS allows)
 - Context usage indicator
-- AI-assisted UI edits with a separate preview and download
+- AI-assisted app and canvas edits, with preview, apply/undo, and download
