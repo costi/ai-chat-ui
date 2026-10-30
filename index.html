@@ -67,6 +67,7 @@
     #jumpLatest { border: 1px solid #444; padding: 5px 12px; font-size: 12px; color: #ccc; border-radius: 18px; }
     .input-bar { display: flex; align-items: flex-end; gap: 12px; padding: 14px 16px; background: var(--surface); border: 1px solid #414141; border-radius: 26px; }
     textarea { flex: 1; min-width: 0; background: none; color: var(--text); border: 0; resize: none; height: 48px; max-height: 180px; padding: 10px 2px; line-height: 1.6; outline: none; }
+    #promptInput { overflow-y: hidden; }
     textarea::placeholder { color: #aaa; }
     #sendBtn { background: #ececec; color: #171717; border-radius: 50%; width: 36px; height: 36px; flex-shrink: 0; margin-bottom: 6px; }
     .tool-card { flex-shrink: 0; min-width: 0; border: 1px solid #444; border-radius: 12px; overflow-wrap: anywhere; }
@@ -626,6 +627,7 @@
     messages.push({ role: "user", content: text });
     appendMessage("user", text);
     promptInput.value = "";
+    resizeComposer();
     updateThreadList(); saveState();
     const box = document.getElementById("chatBox");
     let reply, bubble, totalCalls = 0, completed = false;
@@ -789,9 +791,22 @@
   window.addEventListener("pagehide", () => previewURLs.forEach(url => URL.revokeObjectURL(url)));
 
 
+  function resizeComposer() {
+    const input = document.getElementById("promptInput");
+    const maxHeight = parseFloat(getComputedStyle(input).maxHeight);
+    input.style.height = "auto";
+    const height = Math.max(48, input.scrollHeight);
+    input.style.height = Math.min(height, maxHeight) + "px";
+    input.style.overflowY = height > maxHeight ? "auto" : "hidden";
+  }
+
+  document.getElementById("promptInput").addEventListener("input", resizeComposer);
+  window.addEventListener("resize", resizeComposer);
+  resizeComposer();
+
   // Handle enter key to send
   document.getElementById("promptInput").addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
       e.preventDefault();
       sendMessage();
     }
