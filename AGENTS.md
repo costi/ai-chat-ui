@@ -9,6 +9,7 @@
 - Chat and app editing should share the streamed Chat Completions tool parser. A missing tool call does not establish that a model lacks tool support.
 - Show executed JavaScript in tool cards and preserve it when saved chats reload.
 - Use chunk-based source tools for app editing; keep model history bounded instead of sending or regenerating the whole file.
+- Interactive previews may load scripts, styles, assets, and fetch from any HTTPS source. Keep opaque-origin isolation and keep the computation Worker network-blocked.
 - Keep app-update proposals separate from the working file and preview them in a sandbox.
 - Label context counts as estimates and context limits as manual settings.
 - Verify behavioral UI changes in a browser, including mobile layout. Use mocked API responses instead of live paid requests unless explicitly requested.
