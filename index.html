@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>OpenAI API Client</title>
   <style>
     :root {
@@ -39,7 +40,7 @@
       grid-template-columns: 2fr 1fr 1fr;
       gap: 10px;
     }
-    input {
+    input, select {
       background: #0f172a;
       border: 1px solid var(--border);
       color: var(--text);
@@ -51,6 +52,8 @@
     input:focus { border-color: var(--accent); }
     .chat-box {
       flex: 1;
+      min-height: 0;
+      overflow-anchor: none;
       overflow-y: auto;
       background: var(--card-bg);
       border: 1px solid var(--border);
@@ -140,6 +143,16 @@
       font-weight: 600;
       cursor: pointer;
     }
+    .thread-bar { display: flex; gap: 8px; }
+    .thread-bar select { flex: 1; min-width: 0; }
+    .thread-bar button { padding: 8px 12px; }
+    .storage-note { margin: 0; color: var(--text-muted); font-size: 12px; }
+    #storageStatus { color: #fbbf24; }
+    @media (max-width: 600px) {
+      .config-panel { grid-template-columns: 1fr; }
+      .thread-bar { flex-wrap: wrap; }
+      .msg { max-width: 95%; }
+    }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
   </style>
 </head>
@@ -151,6 +164,15 @@
     <input type="text" id="endpoint" value="https://api.openai.com/v1/chat/completions" placeholder="API Endpoint URL" />
     <input type="text" id="model" value="gpt-4o-mini" placeholder="Model Name" />
     <input type="password" id="apiKey" placeholder="Bearer Token / API Key" />
+  </div>
+
+  <p class="storage-note">Settings and chats are saved in this browser. The saved token is unencrypted.</p>
+  <p class="storage-note" id="storageStatus" role="status" hidden></p>
+  <div class="thread-bar">
+    <select id="threadSelect" aria-label="Saved chats"></select>
+    <button id="newThread" type="button">New chat</button>
+    <button id="deleteThread" type="button">Delete chat</button>
+    <button id="jumpLatest" type="button">Jump to latest</button>
   </div>
 
   <!-- Chat Log -->
@@ -166,7 +188,87 @@
 <script src="https://cdn.jsdelivr.net/npm/marked@18.1.2/lib/marked.umd.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.4.17/dist/purify.min.js"></script>
 <script>
-  const messages = [];
+  const STORAGE_KEY = "ai-chat-ui.v1";
+  let threads = [];
+  let activeThreadId;
+  let messages = [];
+  let sending = false;
+  let saveTimer;
+
+  function storageWarning(text) {
+    const status = document.getElementById("storageStatus");
+    status.textContent = text;
+    status.hidden = false;
+  }
+
+  function currentThread() {
+    return threads.find(thread => thread.id === activeThreadId);
+  }
+
+  function saveState() {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        settings: Object.fromEntries(["endpoint", "model", "apiKey"].map(id => [id, document.getElementById(id).value])),
+        threads,
+        activeThreadId
+      }));
+      document.getElementById("storageStatus").hidden = true;
+    } catch {
+      storageWarning("Could not save in this browser (storage may be blocked or full). Keep this page open to retain this session.");
+    }
+  }
+
+  function updateThreadList() {
+    const select = document.getElementById("threadSelect");
+    select.replaceChildren();
+    for (const thread of threads) {
+      const option = document.createElement("option");
+      option.value = thread.id;
+      option.textContent = thread.messages.find(message => message.role === "user")?.content.slice(0, 60) || "New chat";
+      select.appendChild(option);
+    }
+    select.value = activeThreadId;
+  }
+
+  function showThread() {
+    messages = currentThread().messages;
+    const box = document.getElementById("chatBox");
+    box.replaceChildren();
+    for (const message of messages) appendMessage(message.role, message.content);
+    box.scrollTop = 0;
+    updateThreadList();
+  }
+
+  function newThread() {
+    if (sending) return;
+    const thread = { id: crypto.randomUUID(), messages: [] };
+    threads.unshift(thread);
+    activeThreadId = thread.id;
+    showThread();
+    saveState();
+  }
+
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const state = JSON.parse(raw);
+        for (const id of ["endpoint", "model", "apiKey"]) {
+          if (typeof state.settings?.[id] === "string") document.getElementById(id).value = state.settings[id];
+        }
+        if (!Array.isArray(state.threads)) throw new Error("Invalid threads");
+        threads = state.threads.filter(thread => typeof thread.id === "string" && Array.isArray(thread.messages) &&
+          thread.messages.every(message => ["user", "assistant"].includes(message.role) && typeof message.content === "string"));
+        activeThreadId = threads.find(thread => thread.id === state.activeThreadId)?.id || threads[0]?.id;
+      }
+    } catch {
+      storageWarning("Saved chats could not be loaded. This session can still be used.");
+    }
+    if (threads.length) showThread();
+    else newThread();
+  }
 
   function renderAssistant(element, text) {
     if (!window.marked || !window.DOMPurify) {
@@ -195,7 +297,6 @@
     if (role === "assistant") renderAssistant(div, text);
     else div.textContent = text;
     box.appendChild(div);
-    box.scrollTop = box.scrollHeight;
     return div;
   }
 
@@ -207,17 +308,27 @@
     const apiKey = document.getElementById("apiKey").value.trim();
     const text = promptInput.value.trim();
 
-    if (!text || !endpoint) return;
+    if (sending || !text || !endpoint) return;
+    sending = true;
 
     // Append user input
     messages.push({ role: "user", content: text });
     appendMessage("user", text);
     promptInput.value = "";
     sendBtn.disabled = true;
+    for (const id of ["threadSelect", "newThread", "deleteThread"]) document.getElementById(id).disabled = true;
+    updateThreadList();
+    saveState();
 
     // Create an empty assistant bubble for incoming chunks
     const assistantBubble = appendMessage("assistant", "...");
+    const box = document.getElementById("chatBox");
+    box.scrollTop = box.scrollHeight;
     let fullResponse = "";
+    // Store partial replies as well, so a reload can recover the streamed text.
+    const reply = { role: "assistant", content: "" };
+    const requestMessages = messages.map(message => ({ ...message }));
+    messages.push(reply);
 
     try {
       const headers = { "Content-Type": "application/json" };
@@ -230,7 +341,7 @@
         headers: headers,
         body: JSON.stringify({
           model: model,
-          messages: messages,
+          messages: requestMessages,
           stream: true
         })
       });
@@ -265,22 +376,52 @@
             const parsed = JSON.parse(data);
             const delta = parsed.choices?.[0]?.delta?.content || "";
             fullResponse += delta;
+            reply.content = fullResponse;
+            const readingPosition = box.scrollTop;
             renderAssistant(assistantBubble, fullResponse);
-            document.getElementById("chatBox").scrollTop = document.getElementById("chatBox").scrollHeight;
+            box.scrollTop = readingPosition;
+            if (!saveTimer) saveTimer = setTimeout(() => { saveTimer = null; saveState(); }, 500);
           } catch (e) {
             // Ignore parse errors from partial lines
           }
         }
       }
-
-      messages.push({ role: "assistant", content: fullResponse });
     } catch (err) {
       assistantBubble.classList.add("plain-text");
-      assistantBubble.textContent = `Error: ${err.message}`;
+      assistantBubble.textContent = `${fullResponse ? fullResponse + "\n\n" : ""}Error: ${err.message}`;
     } finally {
+      sending = false;
       sendBtn.disabled = false;
+      for (const id of ["threadSelect", "newThread", "deleteThread"]) document.getElementById(id).disabled = false;
+      if (!reply.content) messages.splice(messages.indexOf(reply), 1);
+      clearTimeout(saveTimer);
+      saveTimer = null;
+      saveState();
     }
   }
+
+  for (const id of ["endpoint", "model", "apiKey"]) document.getElementById(id).addEventListener("input", saveState);
+  document.getElementById("newThread").addEventListener("click", newThread);
+  document.getElementById("threadSelect").addEventListener("change", (event) => {
+    if (sending) return;
+    activeThreadId = event.target.value;
+    showThread();
+    saveState();
+  });
+  document.getElementById("deleteThread").addEventListener("click", () => {
+    if (sending) return;
+    threads = threads.filter(thread => thread.id !== activeThreadId);
+    if (!threads.length) return newThread();
+    activeThreadId = threads[0].id;
+    showThread();
+    saveState();
+  });
+  document.getElementById("jumpLatest").addEventListener("click", () => {
+    const box = document.getElementById("chatBox");
+    box.scrollTop = box.scrollHeight;
+  });
+  window.addEventListener("pagehide", saveState);
+  loadState();
 
   // Handle enter key to send
   document.getElementById("promptInput").addEventListener("keydown", (e) => {
